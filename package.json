@@ -1,0 +1,24 @@
+{
+  "name": "file-generator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon ./dist/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/filesystem": "^0.0.36",
+    "@types/node": "^20.14.10",
+    "nodemon": "^3.1.4",
+    "typescript": "^5.5.3"
+  },
+  "dependencies": {
+    "@types/user-agents": "^1.0.4",
+    "axios": "^1.7.2",
+    "fs": "^0.0.1-security",
+    "puppeteer": "^22.13.0",
+    "user-agents": "^1.1.267"
+  }
+}

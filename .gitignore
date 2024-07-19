@@ -1,0 +1,7 @@
+db
+dev-data
+dist
+inventory
+node_modules
+
+env*
