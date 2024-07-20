@@ -1,5 +1,6 @@
 import fs from 'fs';
 import FS, { FSProps } from './FS';
+import { v4 as uuidv4 } from 'uuid';
 
 export type FileData = object | string | undefined;
 export type FileFormat = 'txt' | 'json';
@@ -9,160 +10,159 @@ export type FileProps<D extends FileData = FileData | undefined> = {
   data?: D;
 } & FSProps;
 
-export type SubfileProps = Omit<FileProps, 'route'>;
-
 export type FileOptions = {
   canReplace?: boolean;
   canCreateEmpty?: boolean;
-  canUpdateOnCreate?: boolean;
 };
 
-type ReadProps = {
-  bufferEncoding?: BufferEncoding;
-};
+type ID = string | number;
 
-export default class JSONFile extends FS {
+export type JSONData<T> = {
+  id?: ID;
+  uuid?: string;
+} & T;
+
+export type JSONFileProps<T> = {
+  data?: (T & { id?: ID })[];
+  options?: FileOptions;
+} & FSProps;
+
+export default class JSONFile<T extends object = object> extends FS {
   private format;
-  private data;
+  private _data: JSONData<T>[] = [];
   private _options: FileOptions = {
     canReplace: false,
     canCreateEmpty: false,
-    canUpdateOnCreate: false,
   };
 
-  constructor({ route, name, format, data }: FileProps, options?: FileOptions) {
+  constructor({
+    route,
+    name,
+    data = [],
+    options,
+  }: JSONFileProps<T> & FileOptions) {
     super('file', route, name);
-    this.format = format;
+    this.format = 'json';
     this.options = options;
 
-    this.checkFolderExists('constructor');
-    if (data && this.exists()) {
-      this.update(data);
-    } else if (data) {
-      this.data = data;
-      this.write(options);
+    if (data.length === 0 && this.exists()) {
+      this.fetch();
     } else {
-      this.write(options);
+      this.create(data);
     }
   }
 
-  public get path() {
+  private create(data: T[]): JSONData<T>[] {
+    this.checkFolderExists('create');
+
+    const { canCreateEmpty, canReplace } = this.options;
+    const fileExists = this.exists('file');
+    if (fileExists) {
+      if (canReplace) {
+        if (canCreateEmpty && data.length === 0) {
+          this.replaceAll(data);
+        } else if (data.length > 0) {
+          this.replaceAll(data);
+        }
+      }
+    } else {
+      if ((canCreateEmpty && data.length === 0) || data.length > 0) {
+        this.data = data;
+      }
+    }
+
+    return this._data;
+  }
+
+  public get data(): JSONData<T>[] {
+    this.fetch();
+    return this._data;
+  }
+
+  private set data(data: JSONData<T>[]) {
+    this._data = data;
+    this.save();
+  }
+
+  public get path(): string {
     return `${this.route}/${this.name}.${this.format}`;
   }
 
-  public get options(): FileOptions {
+  private get options(): FileOptions {
     return this._options;
   }
 
-  public set options(options: FileOptions | undefined) {
+  private set options(options: FileOptions | undefined) {
     if (!options) return;
     this._options = { ...this._options, ...options };
   }
 
-  public read(): FileData {
-    this.checkPathExists('read');
-    const data = fs.readFileSync(this.path, 'utf-8');
-    if (!data) return;
-    this.data = JSON.parse(data);
-    return data;
+  public push(data: JSONData<T>[] | JSONData<T>): JSONData<T>[] {
+    if (Array.isArray(data)) {
+      const newData = [...this._data, ...data];
+      this.data = newData;
+    } else {
+      const newData = [...this._data, data];
+      this.data = newData;
+    }
+
+    return this._data;
   }
 
-  private write(data: FileData, options?: FileOptions) {
-    this.options = options;
-    const { canCreateEmpty, canReplace } = this.options;
+  public updateOne({ uuid, id, ...value }: JSONData<T>): JSONData<T>[] {
+    const index = this.data.findIndex((item) => {
+      return item.id === id || item.uuid === uuid;
+    });
 
-    if (!data && !canCreateEmpty) return this;
+    if (index !== -1) {
+      this._data[index] = { ...this._data[index], ...value };
+      this.save();
+    }
 
-    this.checkFolderExists('write');
+    return this._data;
+  }
 
+  // public updateMany(key: keyof T, value: T[keyof T]): JSONData<T>[] {
+  //   this.data = this._data.map((data) => ({ ...data, [key]: value }));
+  //   return this._data;
+  // }
+
+  public replaceAll(data: JSONData<T>[]): JSONData<T>[] {
+    this.erase();
+    this.data = data;
+    return this._data;
+  }
+
+  private addUUID(data: T | JSONData<T>): JSONData<T> {
+    if ('uuid' in data) return data;
+    const uuid = this.generateUUID();
+    return { ...data, uuid };
+  }
+
+  private generateUUID() {
+    const uuid = uuidv4();
+    return uuid;
+  }
+
+  private fetch(): void {
     if (this.exists()) {
-      this.check(!canReplace, {
-        message: 'File already exists and cannot be replaced',
-        method: 'write',
-      });
-
-      if (canReplace) this.delete();
-    }
-
-    if (!canCreateEmpty) return this;
-
-    switch (typeof data) {
-      case 'object':
-        if (Array.isArray(data)) {
-          fs.writeFileSync(this.path, JSON.stringify(data, null, 2));
-          break;
-        }
-        console.log(data);
-        fs.writeFileSync(this.path, JSON.stringify([data], null, 2));
-        // fs.writeFileSync(this.path, JSON.stringify(data, null, 2));
-        break;
-      case 'string':
-        fs.writeFileSync(this.path, data);
-        break;
-      default:
-        fs.writeFileSync(this.path, '');
-        break;
-    }
-
-    return this;
-  }
-
-  public delete() {
-    if (this.exists('file')) {
-      fs.unlinkSync(this.path);
+      const data = fs.readFileSync(this.path, 'utf-8');
+      if (data) this._data = JSON.parse(data);
     }
   }
 
-  public update(data: FileData) {
-    let newData: FileData;
-
-    if (!data) return;
-
-    if (!this.data) this.read();
-
-    const existingData = this.read();
-
-    switch (typeof existingData) {
-      case 'undefined':
-        newData = data;
-        break;
-      case 'string':
-        this.check(typeof data !== 'string', {
-          message: 'Data must be a string, not an object',
-          method: 'update',
-        });
-        newData = data;
-        break;
-      case 'object':
-        this.check(typeof data !== 'object', {
-          message: 'Data must be an object, not a string',
-          method: 'update',
-        });
-
-        console.log('first');
-        if (Array.isArray(existingData) && Array.isArray(data)) {
-          newData = [...existingData, ...data];
-          break;
-        }
-
-        if (Array.isArray(existingData) && !Array.isArray(data)) {
-          newData = [...existingData, data];
-          break;
-        }
-
-        if (!Array.isArray(existingData) && Array.isArray(data)) {
-          newData = [existingData, ...data];
-          break;
-        }
-
-        if (!Array.isArray(existingData) && !Array.isArray(data)) {
-          newData = [existingData, data];
-          break;
-        }
-
-      // newData = { ...existingData, ...(data as object) };
+  private save(checkUUIDs = true): void {
+    if (checkUUIDs) {
+      const dataWithUUID = this._data.map((item) => this.addUUID(item));
+      this._data = dataWithUUID;
     }
-    console.log(newData);
-    this.write({ data: newData });
+
+    this.checkFolderExists('save');
+    fs.writeFileSync(this.path, JSON.stringify(this._data, null, 2));
+  }
+
+  public erase(): void {
+    if (!this.exists) return;
+    fs.unlinkSync(this.path);
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "file-generator",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -16,9 +16,11 @@
   },
   "dependencies": {
     "@types/user-agents": "^1.0.4",
+    "@types/uuid": "^10.0.0",
     "axios": "^1.7.2",
     "fs": "^0.0.1-security",
     "puppeteer": "^22.13.0",
-    "user-agents": "^1.1.267"
+    "user-agents": "^1.1.267",
+    "uuid": "^10.0.0"
   }
 }

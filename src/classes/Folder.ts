@@ -1,10 +1,5 @@
 import fs from 'fs';
-import JSONFile, {
-  FileFormat,
-  FileOptions,
-  FileProps,
-  SubfileProps,
-} from './File';
+import JSONFile, { JSONFileProps } from './File';
 import FS, { FSProps } from './FS';
 
 export type FolderProps = {
@@ -36,24 +31,42 @@ export default class Folder extends FS {
     return this.data.filter((data) => data.type === 'folder');
   }
 
-  public newFile(
-    input: SubfileProps | [name: string, format: FileFormat],
-    options?: FileOptions
+  public newFile<T extends object>(
+    props: Omit<JSONFileProps<T>, 'route' | 'type'>
   ) {
-    let props: FileProps;
-    if (Array.isArray(input)) {
-      props = { name: input[0], format: input[1], route: this.path };
-    } else {
-      props = { ...input, route: this.path };
-    }
-
-    const newFile = new JSONFile(props, options);
+    const newFile = new JSONFile<T>({
+      ...props,
+      route: this.path,
+    });
     this.data.push(newFile);
     return newFile;
   }
 
+  load() {
+    const allFiles = fs.readdirSync(this.path);
+    allFiles.forEach((filename) => {
+      const stats = fs.statSync(`${this.path}/${filename}`);
+
+      if (stats.isDirectory()) {
+        this.data.push(new Folder({ name: filename, route: this.path }));
+
+        //   this.data.push(new Folder({ name: file, route: this.path }));
+      } else {
+        //   this.data.push(new JSONFile({ name: file, route: this.path }));
+      }
+    });
+
+    // const stats = fs.statSync(`${this.path}/${file}`);
+    // if (stats.isDirectory()) {
+    //   this.data.push(new Folder({ name: file, route: this.path }));
+    // } else {
+    //   this.data.push(new JSONFile({ name: file, route: this.path }));
+    // }
+  }
+
   public newFolder(input: SubfolderProps | string) {
     let props: FolderProps;
+
     if (typeof input === 'string') {
       props = { name: input, route: this.path };
     } else {
@@ -65,39 +78,11 @@ export default class Folder extends FS {
     return newFolder;
   }
 
-  public getFile({ name }: { name: string }) {
+  public getFileByName(name: FSProps['name']) {
     return this.files.find((file) => file.name === name);
   }
 
-  public getFolder({ name }: { name: string }) {
+  public getFolderByName(name: FSProps['name']) {
     return this.folders.find((folder) => folder.name === name);
   }
-
-  // public removeFile({ name }: { name: string }) {
-  //   this.data = this.data.filter((data) => data.name !== name);
-  // }
-
-  // public removeFolder({ name }: { name: string }) {
-  //   this.data = this.data.filter((data) => data.name !== name);
-  // }
-
-  // public getFile({
-  //   propName = 'name',
-  //   value,
-  // }: {
-  //   propName: keyof FileProps;
-  //   value: string;
-  // }) {
-  //   return this.data.find((file) => file[propName] === value);
-  // }
-
-  // get files by include a string, or exclude a string,
-  // public getFiles({}: {}) {}
 }
-
-// what is the typescript method that removes a property from an type?
-// for example type: { a: string, b: number, c: boolean }
-// I want it to return { a: string, b: number }
-// it is called Omit
-// thank you
-// you're welcome
